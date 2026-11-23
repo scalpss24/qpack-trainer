@@ -1,0 +1,8 @@
+{
+  "appId": "com.qpack.trainer",
+  "appName": "QPack Тренажёр",
+  "webDir": "app",
+  "server": {
+    "androidScheme": "https"
+  }
+}

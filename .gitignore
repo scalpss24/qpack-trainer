@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+node_modules/
+android/
+ios/
+*.apk
+*.aab
+.DS_Store
+Thumbs.db

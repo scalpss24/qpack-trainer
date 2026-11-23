@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#4f46e5" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>QPack Тренажёр</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button id="btn-back" class="icon-btn hidden" aria-label="Назад">←</button>
+        <h1 id="topbar-title">QPack Тренажёр</h1>
+      </div>
+      <div class="topbar-actions">
+        <button id="btn-theme" class="icon-btn" title="Переключить тему" aria-label="Переключить тему">◐</button>
+        <button id="btn-backup" class="icon-btn" title="Резервная копия прогресса" aria-label="Резервная копия">⇅</button>
+      </div>
+    </header>
+
+    <main id="main-content" class="container">
+      <!-- Views rendered by app.js -->
+    </main>
+  </div>
+
+  <!-- Hidden file inputs -->
+  <input id="input-qpack" type="file" accept=".qpack,.zip,application/zip,application/octet-stream,*/*" class="hidden" />
+  <input id="input-backup" type="file" accept=".json,application/json,*/*" class="hidden" />
+
+  <!-- Backup Modal -->
+  <div id="modal-backup" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Прогресс и заметки</h2>
+        <button id="btn-close-backup" class="icon-btn" aria-label="Закрыть">✕</button>
+      </div>
+      <p class="muted">
+        Прогресс, избранное и личные заметки хранятся локально в IndexedDB с привязкой к <code>question_id</code> и не сбрасываются при обновлении пакета <code>.qpack</code>.
+      </p>
+      <div class="stack">
+        <button id="btn-export-progress" class="btn btn-primary">Экспорт my_progress_backup.json</button>
+        <button id="btn-copy-progress" class="btn btn-secondary">Копировать JSON в буфер</button>
+        <button id="btn-import-progress" class="btn btn-secondary">Импорт my_progress_backup.json</button>
+      </div>
+      <div id="backup-status" class="status-msg"></div>
+    </div>
+  </div>
+
+  <!-- Image Lightbox -->
+  <div id="lightbox" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop"></div>
+    <img id="lightbox-img" alt="Изображение к вопросу" />
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
