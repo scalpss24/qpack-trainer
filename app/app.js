@@ -90,22 +90,29 @@ function guessMime(path) {
 async function importQpackFile(file) {
   try {
     showToast(`Импорт ${file.name}...`);
-    const ab = await file.arrayBuffer();
-    const filesMap = await readQpackArchive(ab);
-    const manifestBytes = filesMap.get("manifest.json");
-    if (!manifestBytes) {
-      throw new Error("Внутри .qpack отсутствует manifest.json");
-    }
-    const manifest = JSON.parse(new TextDecoder("utf-8").decode(manifestBytes));
-    if (!manifest.package_id || !Array.isArray(manifest.questions)) {
-      throw new Error("Некорректная структура manifest.json");
+    let manifest;
+    const imageEntries = [];
+
+    if (file.name.toLowerCase().endsWith(".json")) {
+      const text = await file.text();
+      manifest = JSON.parse(text);
+    } else {
+      const ab = await file.arrayBuffer();
+      const filesMap = await readQpackArchive(ab);
+      const manifestBytes = filesMap.get("manifest.json");
+      if (!manifestBytes) {
+        throw new Error("Внутри .qpack отсутствует manifest.json");
+      }
+      manifest = JSON.parse(new TextDecoder("utf-8").decode(manifestBytes));
+      for (const [relPath, bytes] of filesMap.entries()) {
+        if (relPath !== "manifest.json" && relPath.startsWith("images/")) {
+          imageEntries.push([relPath, new Blob([bytes], { type: guessMime(relPath) })]);
+        }
+      }
     }
 
-    const imageEntries = [];
-    for (const [relPath, bytes] of filesMap.entries()) {
-      if (relPath !== "manifest.json" && relPath.startsWith("images/")) {
-        imageEntries.push([relPath, new Blob([bytes], { type: guessMime(relPath) })]);
-      }
+    if (!manifest.package_id || !Array.isArray(manifest.questions)) {
+      throw new Error("Некорректная структура manifest.json");
     }
 
     await savePackage(manifest, imageEntries);
@@ -211,9 +218,9 @@ function renderPackagesView() {
 
   mainEl.innerHTML = `
     <div id="dropzone" class="dropzone">
-      <div style="font-weight:600;margin-bottom:6px;">Загрузить пакет тестов (.qpack)</div>
+      <div style="font-weight:600;margin-bottom:6px;">Загрузить пакет тестов (.qpack / .json)</div>
       <div class="muted" style="margin-bottom:12px;">Перетащите файл сюда или выберите на устройстве</div>
-      <button id="btn-pick-qpack" class="btn btn-primary">Выбрать .qpack файл</button>
+      <button id="btn-pick-qpack" class="btn btn-primary">Выбрать .qpack / .json файл</button>
     </div>
     ${pkgHtml}
   `;

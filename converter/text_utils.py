@@ -6,9 +6,9 @@ import re
 # Matches leading question numbers like "1.", "12)", "4 .", "258."
 _LEADING_Q_NUM_RE = re.compile(r"^\s*\d+\s*[.)]\s*")
 
-# Matches leading option markers like "+1.", "1. +", "A)", "A)*", "А.", "1)", "*"
+# Matches leading option markers like "+1.", "1. +", "A)", "A)*", "А.", "*", "·"
 _LEADING_OPT_RE = re.compile(
-    r"^\s*(?:[+*]\s*)?(?:[A-Za-zА-Яа-яЁё]|\d{1,2})\s*[.)]\s*(?:[+*]\s*)?|^\s*[+*]\s*"
+    r"^\s*(?:[+*·•]\s*)?(?:[A-Za-zА-Яа-яЁё]|\d{1,2})\s*[.)]\s*(?:[+*]\s*)?|^\s*[+*·•]\s*"
 )
 
 # Matches trailing correctness markers like "+", "+1", "+ 1", ";+", "*+"

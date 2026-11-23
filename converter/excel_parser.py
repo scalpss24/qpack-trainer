@@ -30,12 +30,19 @@ _STRICT_OPT_PREFIX_RE = re.compile(
 )
 
 
+_ANSWER_KEY_HEADER_RE = re.compile(r"^правильн(?:ый|ые)\s+ответ(?:ы)?\s*:?$", re.IGNORECASE)
+_OPT_START_FOR_LOOKAHEAD_RE = re.compile(
+    r"^(?:\*|[·•]|[A-Za-zА-Яа-яЁё]\s*[.)])"
+)
+
+
 @dataclass
 class _RawRow:
     row_idx: int
     id_val: str | None
     text: str
     signals: CellSignals
+    saw_blank_before: bool = False
 
 
 @dataclass
@@ -213,7 +220,7 @@ def _is_question_start(
     row: _RawRow,
     current_q: _RawRow | None,
     current_opts: list[_RawRow],
-    saw_blank: bool,
+    next_row: _RawRow | None,
 ) -> bool:
     """Decide whether `row` starts a new question block."""
     if current_q is None:
@@ -229,15 +236,32 @@ def _is_question_start(
         return False
 
     # Bold text after a blank row or after collecting at least 1 option
-    if row.signals.is_bold and (saw_blank or len(current_opts) >= 1):
-        # Guard against a bold correct option using "1. ..." when no blank row intervened
-        if saw_blank or has_leading_question_number(row.text) and len(current_opts) >= 2:
+    if row.signals.is_bold and (row.saw_blank_before or len(current_opts) >= 1):
+        if row.saw_blank_before or (has_leading_question_number(row.text) and len(current_opts) >= 2):
             return True
         if not re.match(r"^\d+\s*[.)]", row.text):
             return True
 
-    # Fallback: unbolded numbered question after a blank row or >= 2 options
-    if saw_blank and has_leading_question_number(row.text) and len(current_opts) >= 2:
+    # Numbered question (even without bold or blank row) when number >= 8 or before a '·' answer
+    num_match = re.match(r"^\s*(\d+)\s*[.)]", row.text)
+    if num_match and len(current_opts) >= 1:
+        num = int(num_match.group(1))
+        if row.saw_blank_before and len(current_opts) >= 2 and num > len(current_opts) + 1:
+            return True
+        if num >= 8 and len(current_opts) >= 2 and num > len(current_opts) + 1:
+            return True
+        if next_row is not None and next_row.text.startswith(("·", "•")):
+            return True
+
+    # Unbolded, unnumbered question right before an option list starting with '*' / 'A)' / '·'
+    min_opts_for_lookahead = 1 if (next_row is not None and next_row.text.startswith(("·", "•"))) else 2
+    if (
+        len(current_opts) >= min_opts_for_lookahead
+        and not re.match(r"^\d+\s*[.)]", row.text)
+        and not row.text.startswith(("·", "•"))
+        and next_row is not None
+        and _OPT_START_FOR_LOOKAHEAD_RE.match(next_row.text)
+    ):
         return True
 
     return False
@@ -254,6 +278,7 @@ def _finalize_vertical_block(
 
     if is_flashcard_mode or len(opt_rows) == 1:
         ans_text = normalize_whitespace(opt_rows[0].text) if opt_rows else ""
+        ans_text = re.sub(r"^[·•]\s*", "", ans_text).strip()
         q = Question(
             id=qid,
             category_id=cat_id,
@@ -293,11 +318,8 @@ def _parse_vertical_sheet(
     id_col, text_col = _detect_columns(ws)
     is_flashcard_sheet = "62 вопр" in sheet_name.lower()
 
-    blocks: list[tuple[_RawRow, list[_RawRow]]] = []
-    current_q: _RawRow | None = None
-    current_opts: list[_RawRow] = []
+    raw_rows: list[_RawRow] = []
     saw_blank = False
-
     for r in range(1, ws.max_row + 1):
         cell = ws.cell(r, text_col)
         raw_val = cell.value
@@ -315,17 +337,57 @@ def _parse_vertical_sheet(
             continue
 
         signals = inspect_cell(cell, adjacent_marker_val=id_str if id_str == "+" else None)
-        row = _RawRow(row_idx=r, id_val=id_str, text=text_str, signals=signals)
+        raw_rows.append(
+            _RawRow(
+                row_idx=r,
+                id_val=id_str,
+                text=text_str,
+                signals=signals,
+                saw_blank_before=saw_blank,
+            )
+        )
+        saw_blank = False
 
-        if _is_question_start(row, current_q, current_opts, saw_blank):
+    blocks: list[tuple[_RawRow, list[_RawRow]]] = []
+    current_q: _RawRow | None = None
+    current_opts: list[_RawRow] = []
+    in_answer_key = False
+
+    for i, row in enumerate(raw_rows):
+        next_row = raw_rows[i + 1] if i + 1 < len(raw_rows) else None
+
+        # Merge multi-line bold question continuations before options begin
+        if (
+            not is_flashcard_sheet
+            and current_q is not None
+            and len(current_opts) == 0
+            and not row.saw_blank_before
+            and row.id_val is None
+            and row.signals.is_bold
+            and current_q.signals.is_bold
+            and not _STRICT_OPT_PREFIX_RE.match(row.text)
+            and not has_leading_question_number(row.text)
+        ):
+            current_q.text = f"{current_q.text} {row.text}"
+            continue
+
+        if _is_question_start(row, current_q, current_opts, next_row):
             if current_q is not None and current_opts:
                 blocks.append((current_q, current_opts))
             current_q = row
             current_opts = []
-        else:
-            if current_q is not None:
-                current_opts.append(row)
-        saw_blank = False
+            in_answer_key = False
+        elif current_q is not None:
+            if _ANSWER_KEY_HEADER_RE.match(row.text):
+                in_answer_key = True
+                continue
+            if in_answer_key:
+                key_clean = clean_option_text(row.text).lower()
+                for opt_row in current_opts:
+                    if clean_option_text(opt_row.text).lower() == key_clean:
+                        opt_row.signals.has_plus = True
+                continue
+            current_opts.append(row)
 
     if current_q is not None and current_opts:
         blocks.append((current_q, current_opts))
